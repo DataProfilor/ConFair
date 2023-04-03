@@ -22,6 +22,10 @@ Then download the code repository and cd to your downloaded local directory. Run
 ./ exec.zsh
 ```
 
+
 Note that for MEPS16 dataset, you need to extract the raw data using the R scrip. See details at https://github.com/Trusted-AI/AIF360/blob/master/aif360/data/raw/meps/README.md.
 
 Note for running CAPUCHIN, you need to install the CAPUCHIN package.
+
+## Visualization
+Some visualization in the paper can be found at this folder [notebooks](https://github.com/DataProfilor/ConFair/tree/main/notebooks).

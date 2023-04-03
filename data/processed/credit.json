@@ -1,0 +1,29 @@
+{
+  "target": "SeriousDlqin2yrs",
+  "target_positive_value": "serious delay in 2 years",
+  "sensitive_feature": "age",
+  "size": 120269,
+  "n_features": 7,
+  "continuous_features": [
+    "RevolvingUtilizationOfUnsecuredLines",
+    "NumberOfTime30-59DaysPastDueNotWorse",
+    "DebtRatio",
+    "MonthlyIncome",
+    "NumberOfOpenCreditLinesAndLoans",
+    "NumberOfTimes90DaysLate"
+  ],
+  "categorical_features": [],
+  "protected_group": [
+    "age < 35"
+  ],
+  "group_perc": 13.7,
+  "pos_perc": 10.7,
+  "feature_name_mapping": {
+    "RevolvingUtilizationOfUnsecuredLines": "X1",
+    "NumberOfTime30-59DaysPastDueNotWorse": "X2",
+    "DebtRatio": "X3",
+    "MonthlyIncome": "X4",
+    "NumberOfOpenCreditLinesAndLoans": "X5",
+    "NumberOfTimes90DaysLate": "X6"
+  }
+}

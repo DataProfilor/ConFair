@@ -1,0 +1,54 @@
+{
+  "target": "Y",
+  "target_positive_value": "Private Insurance",
+  "sensitive_feature": "RACE",
+  "size": 86600,
+  "n_features": 19,
+  "continuous_features": [
+    "AGEP",
+    "SCHL",
+    "ESP",
+    "PINCP"
+  ],
+  "categorical_features": [
+    "MAR",
+    "SEX",
+    "DIS",
+    "CIT",
+    "MIG",
+    "MIL",
+    "ANC",
+    "NATIVITY",
+    "DEAR",
+    "DEYE",
+    "DREM",
+    "ESR",
+    "ST",
+    "FER"
+  ],
+  "protected_group": [
+    "Black"
+  ],
+  "group_perc": 9.2,
+  "pos_perc": 48.3,
+  "feature_name_mapping": {
+    "AGEP": "X1",
+    "SCHL": "X2",
+    "ESP": "X3",
+    "PINCP": "X4",
+    "MAR": "X5",
+    "SEX": "X6",
+    "DIS": "X7",
+    "CIT": "X8",
+    "MIG": "X9",
+    "MIL": "X10",
+    "ANC": "X11",
+    "NATIVITY": "X12",
+    "DEAR": "X13",
+    "DEYE": "X14",
+    "DREM": "X15",
+    "ESR": "X16",
+    "ST": "X17",
+    "FER": "X18"
+  }
+}

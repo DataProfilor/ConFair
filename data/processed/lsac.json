@@ -1,0 +1,38 @@
+{
+  "target": "pass_bar",
+  "target_positive_value": "Passed",
+  "sensitive_feature": "race",
+  "size": 24479,
+  "n_features": 11,
+  "continuous_features": [
+    "zfygpa",
+    "zgpa",
+    "DOB_yr",
+    "lsat",
+    "ugpa",
+    "weighted_lsat_ugpa"
+  ],
+  "categorical_features": [
+    "isPartTime",
+    "sex",
+    "cluster_tier",
+    "family_income"
+  ],
+  "protected_group": [
+    "Black"
+  ],
+  "group_perc": 7.7,
+  "pos_perc": 56.6,
+  "feature_name_mapping": {
+    "zfygpa": "X1",
+    "zgpa": "X2",
+    "DOB_yr": "X3",
+    "lsat": "X4",
+    "ugpa": "X5",
+    "weighted_lsat_ugpa": "X6",
+    "isPartTime": "X7",
+    "sex": "X8",
+    "cluster_tier": "X9",
+    "family_income": "X10"
+  }
+}

@@ -1,3 +1,5 @@
+# extract and save experiment results for comparing ConFair to DifFair and Others in real and synthetic data
+# produce a single CSV file for all the settings
 import warnings
 import os
 from PrepareData import read_json, make_folder
@@ -8,7 +10,6 @@ import pandas as pd
 
 warnings.filterwarnings('ignore')
 
-
 def extract_evaluations(data_name, seeds, models,
                         res_path='../intermediate/models/', eval_name_suffix='',
                         eval_path='eval/'):
@@ -17,59 +18,71 @@ def extract_evaluations(data_name, seeds, models,
     eval_path = repo_dir + eval_path
     make_folder(eval_path)
 
-    group_eval_metrics = ['AUC', 'ACC', 'SR', 'BalAcc']
+    group_eval_metrics = ['AUC', 'ACC', 'SR', 'BalAcc', 'ERR', 'FPR', 'FNR', 'PR', 'TPR', 'TNR', 'TP', 'FN', 'TN', 'FP']
     overall_metrics = ['BalAcc', 'DI', 'EQDiff', 'AvgOddsDiff', 'SPDiff', 'FPRDiff', 'FNRDiff', 'ERRDiff']
-    if 'syn' in data_name:
-        # for synthetic data
-        scc_weights = ['scc']
-        scc_bases = ['kam']
+
+    if 'seed' in data_name:
+        # for experiments of synthetic dataset
+        fair_weight_methods = ['scc']
+        fair_weight_bases = ['kam']
     else: # for real datasets
         if 'aware' in eval_name_suffix:
-            # for model aware weights
-            scc_weights = ['scc', 'omn']
-            scc_bases = ['kam'+eval_name_suffix, 'one'+eval_name_suffix]
+            # for experiments of model-aware weights
+            fair_weight_methods = ['scc', 'omn']
+            fair_weight_bases = ['kam'+eval_name_suffix, 'one'+eval_name_suffix]
         elif 'noOPT' in eval_name_suffix:
-            # no optimization of CC
-            scc_weights = ['scc']
-            scc_bases = ['kam' + eval_name_suffix]
-        else: # default comparison
-            scc_weights = ['scc', 'scc', 'omn', 'kam']
-            scc_bases = ['one', 'kam', 'one', 'one']
+            # for experiments of no optimization of CC
+            fair_weight_methods = ['scc']
+            fair_weight_bases = ['kam' + eval_name_suffix]
+        else: # for experiments of comparing ConFair to others
+            fair_weight_methods = ['scc', 'omn', 'kam']
+            fair_weight_bases = ['kam', 'one', 'one']
 
     res_df = pd.DataFrame(columns=['data', 'model', 'seed', 'method', 'group', 'metric', 'value'])
     cur_dir = res_path + data_name + '/'
     for model_name in models:
-        if model_name == 'tr' and 'syn' not in data_name:
-            scc_weights = scc_weights + ['cap']
-            scc_bases = scc_bases + ['one']
+        if model_name == 'tr' and 'seed' not in data_name and 'aware' not in eval_name_suffix and 'noOPT' not in eval_name_suffix:
+            fair_weight_methods = fair_weight_methods + ['cap']
+            fair_weight_bases = fair_weight_bases + ['one']
         for seed in seeds:
             if 'aware' in eval_name_suffix:
-                # skip the results for multi model cases
-                pass
+                # read the results of model without intervention for experiments of model-aware weights
+                eval_res_orig = read_json('{}eval-{}-{}-multi.json'.format(cur_dir, model_name, seed))
+                for group in ['all', 'G0', 'G1']:
+                    base = [data_name, model_name.upper(), seed, 'ORIG', group]
+                    for metric_i in group_eval_metrics:
+                        res_df.loc[res_df.shape[0]] = base + [metric_i, eval_res_orig['ORIG'][group][metric_i]]
+                for metric_i in overall_metrics:
+                    res_df.loc[res_df.shape[0]] = [data_name, model_name.upper(), seed, 'ORIG', 'all'] + [metric_i, eval_res_orig['ORIG']['all'][metric_i]]
             else:
-                # get multi results
+                # get the results of DifFair
                 eval_mcc_name = '{}eval-{}-{}-{}{}.json'.format(cur_dir, model_name, seed, 'multi', eval_name_suffix)
                 if os.path.exists(eval_mcc_name):
                     eval_res = read_json(eval_mcc_name)
 
                     for mcc_i in ['MCC-MIN', 'MCC-W1', 'MCC-W2', 'SEP', 'ORIG']:
-
+                        if 'noOPT' in eval_name_suffix:
+                            base = [data_name, model_name.upper(), seed, mcc_i+'-NOOPT']
+                        else:
+                            base = [data_name, model_name.upper(), seed, mcc_i]
                         for group in ['all', 'G0', 'G1']:
-                            base = [data_name, model_name.upper(), seed, mcc_i, group]
                             for metric_i in group_eval_metrics:
-                                res_df.loc[res_df.shape[0]] = base + [metric_i, eval_res[mcc_i][group][metric_i]]
+                                res_df.loc[res_df.shape[0]] = base + [group, metric_i, eval_res[mcc_i][group][metric_i]]
                         for metric_i in overall_metrics:
-                            res_df.loc[res_df.shape[0]] = [data_name, model_name.upper(), seed, mcc_i, 'all'] + [metric_i, eval_res[mcc_i]['all'][metric_i]]
+                            res_df.loc[res_df.shape[0]] = base + ['all', metric_i, eval_res[mcc_i]['all'][metric_i]]
                 else:
                     print('--> no eval for', eval_mcc_name)
-                    # adding rows with -1 for visualization
+                    # special hecking: adding rows with -1 for visualization if no model is returned
                     for mcc_i in ['MCC-MIN', 'MCC-W1', 'MCC-W2']:
+                        if 'noOPT' in eval_name_suffix:
+                            base = [data_name, model_name.upper(), seed, mcc_i+'-NOOPT', 'all']
+                        else:
+                            base = [data_name, model_name.upper(), seed, mcc_i, 'all']
                         for metric_i in overall_metrics:
-                            res_df.loc[res_df.shape[0]] = [data_name, model_name.upper(), seed, mcc_i, 'all'] + [metric_i, -1]
+                            res_df.loc[res_df.shape[0]] = base + [metric_i, -1]
 
-
-            # get single results
-            for weight_i, base_i in zip(scc_weights, scc_bases):
+            # get results of fairness intervention under reweighing strategies
+            for weight_i, base_i in zip(fair_weight_methods, fair_weight_bases):
                 eval_single_name = '{}eval-{}-{}-{}-{}.json'.format(cur_dir, model_name, seed, weight_i, base_i)
                 method_name = weight_i.upper() + '-' + base_i.upper()
                 if os.path.exists(eval_single_name):
@@ -82,11 +95,13 @@ def extract_evaluations(data_name, seeds, models,
                         res_df.loc[res_df.shape[0]] = [data_name, model_name.upper(), seed, method_name, 'all'] + [metric_i, eval_res[weight_i.upper()]['all'][metric_i]]
                 else:
                     print('--> Adding zero rows Because no eval for', eval_single_name)
+                    # special hecking: adding rows with -1 for visualization if no model is returned
                     for metric_i in overall_metrics:
-                        res_df.loc[res_df.shape[0]] = [data_name, model_name.upper(), seed, method_name, 'all'] + [metric_i, 0]
+                        res_df.loc[res_df.shape[0]] = [data_name, model_name.upper(), seed, method_name, 'all'] + [metric_i, -1]
 
     res_df.to_csv(eval_path+'res{}-{}.csv'.format(eval_name_suffix, data_name), index=False)
     print('Result is saved at', eval_path+'res{}-{}.csv'.format(eval_name_suffix, data_name))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Extract evaluation results")
     parser.add_argument("--run", type=str, default='parallel',
@@ -97,18 +112,28 @@ if __name__ == '__main__':
                         help="number of datasets over which the script is running. Default is None for all the datasets.")
     parser.add_argument("--model", type=str, default='all',
                         help="extract results for all the models as default. Otherwise, only extract the results for the input model from ['lr', 'tr'].")
-    parser.add_argument("--eval", type=str, default='', #-aware, '', -noOPT
+    parser.add_argument("--eval", type=str, default='', #other options are: -aware, -noOPT
                         help="the setting of evaluation. Default is running for DifFair and ConFair. "
-                             "If '-aware', is specified, get the evaluation results for weight mismatched experiments. "
-                             "If '-noOPT' is specified, get the evaluation results for removing optimization experiments.")
+                             "If '-aware', is specified, get the evaluation results for experiments of model-aware weights. "
+                             "If '-noOPT' is specified, get the evaluation results for experiments of no optimization of CC.")
     parser.add_argument("--exec_n", type=int, default=20,
                         help="number of executions with different random seeds. Default is 20.")
     args = parser.parse_args()
 
-    datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    all_supported_data = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI'] + ['seed{}'.format(x) for x in [12345, 15, 433, 57005, 7777]]
+    if args.data == 'all_syn':
+        gen_seeds = [12345, 15, 433, 57005, 7777]
+        datasets = ['seed{}'.format(x) for x in gen_seeds]
+    elif args.data == 'all':
+        datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    elif args.data in all_supported_data:
+        datasets = [args.data]
+    else:
+        raise ValueError(
+            'The input "data" is not valid. CHOOSE FROM ["seed12345", "seed15", "seed433", "seed57005", "seed7777", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
+
 
     seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100, 923]
-
     models = ['lr', 'tr']
 
     if args.exec_n is None:
@@ -118,16 +143,6 @@ if __name__ == '__main__':
     else:
         n_exec = int(args.exec_n)
         seeds = seeds[:n_exec]
-
-    if args.data == 'all':
-        pass
-    elif args.data in datasets:
-        datasets = [args.data]
-    elif 'syn' in args.data:
-        datasets = ['syn{}'.format(x) for x in seeds]
-    else:
-        raise ValueError(
-            'The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
     if args.set_n is not None:
         if type(args.set_n) == str:

@@ -102,7 +102,19 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    all_supported_data = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI'] + ['seed{}'.format(x) for x in
+                                                                                         [12345, 15, 433, 57005, 7777]]
+    if args.data == 'all_syn':
+        gen_seeds = [12345, 15, 433, 57005, 7777]
+        datasets = ['seed{}'.format(x) for x in gen_seeds]
+    elif args.data == 'all':
+        datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    elif args.data in all_supported_data:
+        datasets = [args.data]
+    else:
+        raise ValueError(
+            'The input "data" is not valid. CHOOSE FROM ["seed12345", "seed15", "seed433", "seed57005", "seed7777", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
+
     seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100, 923]
 
     if args.exec_n is None:
@@ -114,15 +126,6 @@ if __name__ == '__main__':
     else:
         n_exec = int(args.exec_n)
         seeds = seeds[:n_exec]
-
-    if args.data == 'all':
-        pass
-    elif args.data in datasets:
-        datasets = [args.data]
-    elif 'syn' in args.data:
-        datasets = ['syn{}'.format(x) for x in seeds]
-    else:
-        raise ValueError('The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
 
     if args.set_n is not None:
@@ -150,10 +153,10 @@ if __name__ == '__main__':
                 kernel_name = 'gaussian'
             elif data_name in ['credit', 'bank', 'lsac', 'meps16', 'ACSM', 'ACSE', 'ACSP', 'ACSH']: #current optimal
                 kernel_name = 'exponential'
-            elif 'syn' in data_name:
+            elif 'seed' in data_name:
                 kernel_name = 'exponential'
             else:
-                raise ValueError('The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
+                raise ValueError('The input "data" is not valid. CHOOSE FROM ["seed#", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
             for seed in seeds:
                 tasks.append([data_name, seed, kernel_name, res_path, args.opt])

@@ -53,6 +53,8 @@ def prepare_data_for_ML_models(data_name, seeds, cur_path, n_bins=10, sensi_col=
         data_obj = MEPS(path=cur_path)
     elif data_name == 'lsac':
         data_obj = LSAC(path=cur_path)
+    elif data_name == 'UFRGS':
+        data_obj = UFRGS(path=cur_path)
     elif data_name == 'cardio':
         data_obj = Cardio(path=cur_path)
     elif data_name == 'credit':
@@ -71,13 +73,13 @@ def prepare_data_for_ML_models(data_name, seeds, cur_path, n_bins=10, sensi_col=
         data_obj = ACSMobility(path=cur_path)
     elif data_name == 'ACSI':
         data_obj = ACSIncomePovertyRatio(path=cur_path)
-    elif 'syn' in data_name:
+    elif 'seed' in data_name:
         pass
     else:
-        raise ValueError('The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACST", "ACSP", "ACSH", "ACSM", "ACSI"].')
+        raise ValueError('The input "data" is not valid. CHOOSE FROM ["seed", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACST", "ACSP", "ACSH", "ACSM", "ACSI"].')
     meta_file = '{}{}.json'.format(data_path, data_name)
 
-    if 'syn' in data_name:
+    if 'seed' in data_name:
         orig_df = pd.read_csv('{}{}.csv'.format(data_path, data_name))
         num_atts = ['X1', 'X2']
         cat_atts = []
@@ -232,6 +234,34 @@ class Dataset():
         output_df.to_csv(output_path + self.name + '.csv', index=False)
         print('--> Processed data is saved to ', output_path + self.name + '.csv\n')
         return output_df
+
+class UFRGS(Dataset):
+    # this dataset is from Harvard Dataverse. See details at https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/O35FW8
+    # It consists of entrance exam scores of students applying to a university in Brazil (Federal University of Rio Grande do Sul), along with the students' GPAs during the first three semesters at university.
+
+    def __init__(self, name=None, path='../'):
+        try:
+            raw_df = pd.read_csv(path+'data/UFRGS/data.csv')
+        except IOError as err:
+            print("IOError: {}".format(err))
+
+        categorical_columns = None
+        numerical_columns = ['physics', 'biology', 'history', 'SecondLanguage', 'geography', 'literature',
+                             'PortugueseEssay', 'math', 'chemistry']
+
+        # raw_df['GPA'] = raw_df['GPA'].apply(lambda x: int(x >= 3.3))
+        label_col = 'GPA'  # whether GPA in the first three semesters is greater than 3.0
+        fav_transform = None # no need to transform as the original target column is binary
+        fav_meta = 'GPA greater or equal than 3.3' #  for meta information
+
+        sensi_col = 'gender'
+        sensi_col_mapping = {'female': 0, 'male': 1} #  for meta information
+        sensi_transform_flag = False # no need to transform as the original sensitive column is binary
+
+        if name is not None:
+            super().__init__(raw_df, name, label_col, fav_transform, fav_meta, sensi_col, sensi_col_mapping, sensi_transform_flag)
+        else:
+            super().__init__(raw_df, 'UFRGS', label_col, fav_transform, fav_meta, sensi_col, sensi_col_mapping, sensi_transform_flag)
 
 class Cardio(Dataset):
     # this dataset is from Kaggle https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset
@@ -635,9 +665,21 @@ if __name__ == '__main__':
                         help="number of executions with different random seeds. Default is 20.")
     args = parser.parse_args()
 
-    datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
-    seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100,
-             923]
+    all_supported_data = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI'] + ['seed{}'.format(x) for x in
+                                                                                         [12345, 15, 433, 57005, 7777]]
+    if args.data == 'all_syn':
+        gen_seeds = [12345, 15, 433, 57005, 7777]
+        datasets = ['seed{}'.format(x) for x in gen_seeds]
+    elif args.data == 'all':
+        datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    elif args.data in all_supported_data:
+        datasets = [args.data]
+    else:
+        raise ValueError(
+            'The input "data" is not valid. CHOOSE FROM ["seed12345", "seed15", "seed433", "seed57005", "seed7777", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
+
+    seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100, 923]
+
     if args.exec_n is None:
         raise ValueError(
             'The input "exec_n" is requried. Use "--exec_n 1" for a single execution.')
@@ -647,16 +689,6 @@ if __name__ == '__main__':
     else:
         n_exec = int(args.exec_n)
         seeds = seeds[:n_exec]
-
-    if args.data == 'all':
-        pass
-    elif args.data in datasets:
-        datasets = [args.data]
-    elif 'syn' in args.data:
-        datasets = ['syn{}'.format(x) for x in seeds]
-    else:
-        raise ValueError(
-            'The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
     if args.set_n is not None:
         if type(args.set_n) == str:

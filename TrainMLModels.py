@@ -181,7 +181,7 @@ def find_optimal_thres(y_val_df, opt_obj='BalAcc', pred_col=None, num_thresh=100
 
 
 def model_trainer(data_name, seed, model_name, sensi_col_in_training=True, res_path='../intermediate/models/',
-               verbose=True, n_groups=2, data_path='data/processed/', sensi_col = 'A', y_col = 'Y'):
+               verbose=False, n_groups=2, data_path='data/processed/', sensi_col = 'A', y_col = 'Y'):
     start = timeit.default_timer()
     cur_dir = res_path + data_name + '/'
     make_folder(cur_dir)
@@ -227,7 +227,7 @@ def model_trainer(data_name, seed, model_name, sensi_col_in_training=True, res_p
         dump(model, '{}{}-{}.joblib'.format(cur_dir, model_name, seed))
 
         # optimize threshold first
-        opt_thres = find_optimal_thres(validate_df, opt_obj='BalAcc')
+        opt_thres = find_optimal_thres(validate_df, opt_obj='BalAcc', num_thresh=100)
         par_dict = {'thres': opt_thres['thres'], 'BalAcc': opt_thres['BalAcc'], 'model_setting': 'S{}'.format(sensi_col_in_training)}
 
         # train group-level models for DifFair
@@ -248,29 +248,27 @@ def model_trainer(data_name, seed, model_name, sensi_col_in_training=True, res_p
                 if sum(cur_pred_group) == 0:
                     print('==> model predict only one label for group ', group_i, data_name, model_name, seed)
                 group_val_df[pred_col_i] = cur_pred_group
-                if data_name in ['bank', 'cardio'] and group_i == 1 and model_name == 'tr': # for a more finite search space
-                    n_thres = 1000
-                else:
-                    n_thres = 100
 
-                group_opt_thres = find_optimal_thres(group_val_df, opt_obj='BalAcc', pred_col=pred_col_i, num_thresh=n_thres)
+
+                group_opt_thres = find_optimal_thres(group_val_df, opt_obj='BalAcc', pred_col=pred_col_i, num_thresh=100)
                 par_dict.update({'thres_g{}'.format(group_i): group_opt_thres['thres'], 'BalAcc_g{}'.format(group_i): group_opt_thres['BalAcc']})
 
                 dump(group_model, '{}{}-{}-G{}.joblib'.format(cur_dir, model_name, seed, group_i))
             else:
                 print('---- no group model fitted for ', data_name, seed, model_name, 'G{}'.format(group_i))
+
         end = timeit.default_timer()
         time = end - start
         par_dict.update({'time': time})
         save_json(par_dict, '{}par-{}-{}.json'.format(cur_dir, model_name, seed))
 
         if verbose:
-            Y_train_pred = generate_model_predictions(model, train_data, opt_thres=opt_thres['thres'])
+            Y_train_pred = generate_model_predictions(model, train_data, opt_thres=0.5)
             if sum(Y_train_pred) == 0:
                 print('==> model predict only one label for training data ', data_name, model_name, seed)
             score_train = learner.score(Y_train, Y_train_pred)
             print('---' * 8, data_name, seed, model_name, '---' * 8)
-            print(learner.scoring, "on train data: ", score_train)
+            print(learner.scoring, "of ORIG model on train data: ", score_train)
             print('---' * 10, '\n')
     else:
         print('++ no model fitted for ', data_name, seed, model_name)
@@ -294,9 +292,20 @@ if __name__ == '__main__':
                         help="number of executions with different random seeds. Default is 20.")
     args = parser.parse_args()
 
-    datasets = ['meps16', 'lsac', 'bank', 'cardio', 'ACSM', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
-    seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100,
-             923]
+    all_supported_data = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI'] + ['seed{}'.format(x) for x in
+                                                                                         [12345, 15, 433, 57005, 7777]]
+    if args.data == 'all_syn':
+        gen_seeds = [12345, 15, 433, 57005, 7777]
+        datasets = ['seed{}'.format(x) for x in gen_seeds]
+    elif args.data == 'all':
+        datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    elif args.data in all_supported_data:
+        datasets = [args.data]
+    else:
+        raise ValueError(
+            'The input "data" is not valid. CHOOSE FROM ["seed12345", "seed15", "seed433", "seed57005", "seed7777", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
+
+    seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100, 923]
 
     models = ['lr', 'tr']
 
@@ -309,16 +318,6 @@ if __name__ == '__main__':
     else:
         n_exec = int(args.exec_n)
         seeds = seeds[:n_exec]
-
-    if args.data == 'all':
-        pass
-    elif args.data in datasets:
-        datasets = [args.data]
-    elif 'syn' in args.data:
-        datasets = ['syn{}'.format(x) for x in seeds]
-    else:
-        raise ValueError(
-            'The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
     if args.set_n is not None:
         if type(args.set_n) == str:
@@ -351,7 +350,7 @@ if __name__ == '__main__':
         for data_name in datasets:
             for seed in seeds:
                 for model_i in models:
-                    tasks.append([data_name, seed, model_i, args.sensi, res_path, False])
+                    tasks.append([data_name, seed, model_i, args.sensi, res_path, True])
         with Pool(cpu_count()//2) as pool:
             pool.starmap(model_trainer, tasks)
     else:

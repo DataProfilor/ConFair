@@ -1,3 +1,4 @@
+# Extract the run-time of fairness interventions
 import warnings
 import os
 
@@ -55,7 +56,7 @@ def extract_time(data_name, seeds, models, res_path='../intermediate/models/',
     print('Result is saved at', eval_path+'time-{}.csv'.format(data_name))
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Extract running time")
+    parser = argparse.ArgumentParser(description="Extract run-time of fairness interventions")
     parser.add_argument("--run", type=str, default='parallel',
                         help="setting of 'parallel' for system evaluation or 'serial' execution for unit test.")
     parser.add_argument("--data", type=str, default='all',

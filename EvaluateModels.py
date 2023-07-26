@@ -11,7 +11,8 @@ from TrainMLModels import generate_model_predictions, find_optimal_thres
 
 warnings.filterwarnings('ignore')
 
-def eval_predictions(y_true, y_pred, label_order=[0, 1], metrics=['AUC', 'ACC', 'ERR', 'FPR', 'FNR', 'PR', 'TPR', 'TNR', 'TP', 'FN', 'TN', 'FP', 'SR']):
+def eval_predictions(y_true, y_pred, label_order=[0, 1],
+                     metrics=['AUC', 'ACC', 'SR', 'ERR', 'FPR', 'FNR', 'PR', 'TPR', 'TNR', 'TP', 'FN', 'TN', 'FP']):
 
     ACC = round(accuracy_score(y_true, y_pred), 3)
     try:
@@ -76,19 +77,32 @@ def eval_settings(test_eval_df, sensi_col, pred_col, n_groups=2):
 
     avg_odds = 0.5 * (FPR_all[0] - FPR_all[1] + eq)
     sp_diff = PR_all[0] - PR_all[1]
-    for metric_i, value_i in zip(['BalAcc', 'DI', 'EQDiff', 'AvgOddsDiff', 'SPDiff', 'FPRDiff', 'FNRDiff', 'ERRDiff'], [bal_acc_all, di_pr, eq, avg_odds, sp_diff, fpr_diff, fnr_diff, err_diff]):
+    overall_metrics = ['BalAcc', 'DI', 'EQDiff', 'AvgOddsDiff', 'SPDiff', 'FPRDiff', 'FNRDiff', 'ERRDiff']
+
+    for metric_i, value_i in zip(overall_metrics, [bal_acc_all, di_pr, eq, avg_odds, sp_diff, fpr_diff, fnr_diff, err_diff]):
         eval_res_all.update({metric_i: value_i})
     results['all'] = eval_res_all
     return results
 
-def assign_pred_mcc_min(x, vio_means, n_vio=4): # assign prediction based on minimal violation
-    violations = [x.iloc[i]* (1-mean_i) for i, mean_i in enumerate(vio_means)]
 
+def assign_pred_mcc_min_real(x, vio_means, n_vio=4): # assign prediction based on minimal violation for real data
+    violations = [x.iloc[i] * (1 - mean_i) for i, mean_i in enumerate(vio_means)]
     pred_index = violations.index(min(violations))
+
     if pred_index <= 1:
         return x.iloc[n_vio]
     else:
         return x.iloc[n_vio+1]
+
+
+def assign_pred_mcc_min_syn(x, thresholds, n_vio=4): # assign prediction based on minimal violation for synthetic data
+    violations = [x.iloc[i] for i in range(n_vio)]
+    pred_index = violations.index(min(violations))
+
+    if pred_index <= 1:
+        return int(x.iloc[n_vio] > thresholds[0])
+    else:
+        return int(x.iloc[n_vio + 1] > thresholds[1])
 
 def assign_pred_mcc_weight(x, vio_means, n_vio=4): # assign prediction based on weighted sum violation
     weights = []
@@ -197,22 +211,44 @@ def eval_predicitons(data_name, seed, model_name, setting,
         if sum(vio_means) < 0.1: # no reasonable violations are produced for all the four subsets
             pass
         else:
-            # find the optimal threshold over validate data for mcc weighted version
-            val_df['Y_pred_min'] = val_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_min(x, vio_means), axis=1)
+            # # find the optimal threshold over validate data for mcc weighted version
             val_df['Y_pred_w1'] = val_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_weight(x, vio_means), axis=1)
             val_df['Y_pred_w2'] = val_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_weight_group(x, vio_means), axis=1)
 
-            min_opt_thres = find_optimal_thres(val_df, opt_obj='BalAcc', pred_col='Y_pred_min')
-            w1_opt_thres = find_optimal_thres(val_df, opt_obj='BalAcc', pred_col='Y_pred_w1')
-            w2_opt_thres = find_optimal_thres(val_df, opt_obj='BalAcc', pred_col='Y_pred_w2')
+            w1_opt_thres = find_optimal_thres(val_df, opt_obj='BalAcc', pred_col='Y_pred_w1', num_thresh=100)
+            w2_opt_thres = find_optimal_thres(val_df, opt_obj='BalAcc', pred_col='Y_pred_w2', num_thresh=100)
 
-            test_df['Y_pred_min'] = test_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_min(x, vio_means), axis=1)
             test_df['Y_pred_w1'] = test_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_weight(x, vio_means), axis=1)
             test_df['Y_pred_w2'] = test_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_weight_group(x, vio_means), axis=1)
 
-            test_df['Y_pred_min'] = test_df['Y_pred_min'].apply(lambda x: int(x > min_opt_thres['thres']))
             test_df['Y_pred_w1'] = test_df['Y_pred_w1'].apply(lambda x: int(x > w1_opt_thres['thres']))
             test_df['Y_pred_w2'] = test_df['Y_pred_w2'].apply(lambda x: int(x > w2_opt_thres['thres']))
+            if 'seed' in data_name:
+                # for synthetic dataset
+                test_df['Y_pred_min'] = test_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(
+                    lambda x: assign_pred_mcc_min_syn(x, [model_par['thres_g0'], model_par['thres_g1']]), axis=1)
+                # min strategy share the same parameter with sep
+                par_dict = {'orig': {'thres': model_par['thres'], 'BalAcc': model_par['BalAcc']},
+                            'w1': {'thres': w1_opt_thres['thres'], 'BalAcc': w1_opt_thres['BalAcc']},
+                            'w2': {'thres': w2_opt_thres['thres'], 'BalAcc': w2_opt_thres['BalAcc']},
+                            'sep': {'thres': (model_par['thres_g0'], model_par['thres_g1']),
+                                    'BalAcc': (model_par['BalAcc_g0'], model_par['BalAcc_g1'])},
+                            'min': {'thres': (model_par['thres_g0'], model_par['thres_g1']),
+                                    'BalAcc': (model_par['BalAcc_g0'], model_par['BalAcc_g1'])}
+                            }
+            else: # for real data
+                val_df['Y_pred_min'] = val_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_min_real(x, vio_means), axis=1)
+                min_opt_thres = find_optimal_thres(val_df, opt_obj='BalAcc', pred_col='Y_pred_min', num_thresh=100)
+                test_df['Y_pred_min'] = test_df[vio_cols + ['Y_pred_G0', 'Y_pred_G1']].apply(lambda x: assign_pred_mcc_min_real(x, vio_means), axis=1)
+                test_df['Y_pred_min'] = test_df['Y_pred_min'].apply(lambda x: int(x > min_opt_thres['thres']))
+
+                par_dict = {'orig': {'thres': model_par['thres'], 'BalAcc': model_par['BalAcc']},
+                            'min': {'thres': min_opt_thres['thres'], 'BalAcc': min_opt_thres['BalAcc']},
+                            'w1': {'thres': w1_opt_thres['thres'], 'BalAcc': w1_opt_thres['BalAcc']},
+                            'w2': {'thres': w2_opt_thres['thres'], 'BalAcc': w2_opt_thres['BalAcc']},
+                            'sep': {'thres': (model_par['thres_g0'], model_par['thres_g1']),
+                                    'BalAcc': (model_par['BalAcc_g0'], model_par['BalAcc_g1'])}
+                            }
 
             test_df.to_csv('{}test-{}-{}-{}{}.csv'.format(cur_dir, model_name, seed, setting, opt_suffix), index=False)
 
@@ -221,39 +257,31 @@ def eval_predicitons(data_name, seed, model_name, setting,
                 eval_res[cur_setting] = eval_settings(test_df, sensi_col, pred_y)
 
             save_json(eval_res, '{}eval-{}-{}-{}{}.json'.format(cur_dir, model_name, seed, setting, opt_suffix))
-
-            par_dict = {'orig': {'thres': model_par['thres'], 'BalAcc': model_par['BalAcc']},
-                        'min': {'thres': min_opt_thres['thres'], 'BalAcc': min_opt_thres['BalAcc']},
-                        'w1': {'thres': w1_opt_thres['thres'], 'BalAcc': w1_opt_thres['BalAcc']},
-                        'w2': {'thres': w2_opt_thres['thres'], 'BalAcc': w2_opt_thres['BalAcc']},
-                        'sep': {'thres': (model_par['thres_g0'], model_par['thres_g1']),
-                                'BalAcc': (model_par['BalAcc_g0'], model_par['BalAcc_g1'])},
-                        }
-
             save_json(par_dict, '{}par-{}-{}-{}{}.json'.format(cur_dir, model_name, seed, setting, opt_suffix))
 
     elif setting == 'single':
-        if 'syn' in data_name:
-            # for synthetic data
-            weights = ['scc']
-            bases = ['kam']
+        if 'seed' in data_name:
+            # for experiments of synthetic dataset
+            fair_weight_methods = ['scc']
+            fair_weight_bases = ['kam']
         else:
             if not cc_opt:
-                # no optimization of CC
-                weights = ['scc']
-                bases = ['kam' + opt_suffix]
-            else: # default setting optimization of CCs
-                if not model_aware: # for experiments with right weights
-                    weights = ['scc', 'scc', 'omn', 'kam']
-                    bases = ['one', 'kam', 'one', 'one']
+                # for experiments of no optimization of CC
+                fair_weight_methods = ['scc']
+                fair_weight_bases = ['kam' + opt_suffix]
+            else: # default setting with optimization of CCs
+                if not model_aware: # for experiments of comparing ConFair to others
+                    fair_weight_methods = ['scc', 'scc', 'omn', 'kam']
+                    fair_weight_bases = ['one', 'kam', 'one', 'one']
                     if model_name == 'tr':
-                        weights = weights + ['cap']
-                        bases = bases + ['one']
-                else: # for experiments with model-aware weights
-                    weights = ['scc', 'omn']
-                    bases = ['kam-aware', 'one-aware']
+                        fair_weight_methods = fair_weight_methods + ['cap']
+                        fair_weight_bases = fair_weight_bases + ['one']
 
-        for reweight_method, weight_base in zip(weights, bases):
+                else: # for experiments of model-aware weights
+                    fair_weight_methods = ['scc', 'omn']
+                    fair_weight_bases = ['kam-aware', 'one-aware']
+
+        for reweight_method, weight_base in zip(fair_weight_methods, fair_weight_bases):
             eval_res = {}
             test_file = '{}pred-{}-{}-{}-{}.csv'.format(cur_dir, model_name, seed, reweight_method, weight_base)
             if os.path.exists(test_file):
@@ -268,7 +296,7 @@ def eval_predicitons(data_name, seed, model_name, setting,
         raise ValueError('Input "method" is not supported. CHOOSE FROM [multi, single].')
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Eval fairness interventions on real data")
+    parser = argparse.ArgumentParser(description="Generate evaluation results from experiments")
     parser.add_argument("--run", type=str, default='parallel',
                         help="setting of 'parallel' for system evaluation or 'serial' execution for unit test.")
     parser.add_argument("--data", type=str, default='all',
@@ -280,19 +308,35 @@ if __name__ == '__main__':
 
     parser.add_argument("--setting", type=str, default='all',
                         help="which method to evaluate. CHOOSE FROM '[multi, single]'.")
+
     parser.add_argument("--exec_n", type=int, default=20,
                         help="number of executions with different random seeds. Default is 20.")
+
     parser.add_argument("--opt", type=int, default=1,
                         help="whether to apply the optimization for CC tool.")
+
     parser.add_argument("--aware", type=int, default=0,
                         help="whether to evaluate for the model aware weights.")
+
     args = parser.parse_args()
 
-    datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    all_supported_data = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI'] + ['seed{}'.format(x) for x in
+                                                                                         [12345, 15, 433, 57005, 7777]]
+    if args.data == 'all_syn':
+        gen_seeds = [12345, 15, 433, 57005, 7777]
+        datasets = ['seed{}'.format(x) for x in gen_seeds]
+    elif args.data == 'all':
+        datasets = ['meps16', 'lsac', 'ACSP', 'credit', 'ACSE', 'ACSH', 'ACSI']
+    elif args.data in all_supported_data:
+        datasets = [args.data]
+    else:
+        raise ValueError(
+            'The input "data" is not valid. CHOOSE FROM ["seed12345", "seed15", "seed433", "seed57005", "seed7777", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
     seeds = [1, 12345, 6, 2211, 15, 88, 121, 433, 500, 1121, 50, 583, 5278, 100000, 0xbeef, 0xcafe, 0xdead, 7777, 100, 923]
 
     models = ['lr', 'tr']
+
     settings = ['multi', 'single']
 
     if args.exec_n is None:
@@ -304,16 +348,6 @@ if __name__ == '__main__':
     else:
         n_exec = int(args.exec_n)
         seeds = seeds[:n_exec]
-
-    if args.data == 'all':
-        pass
-    elif args.data in datasets:
-        datasets = [args.data]
-    elif 'syn' in args.data:
-        datasets = ['syn{}'.format(x) for x in seeds]
-    else:
-        raise ValueError(
-            'The input "data" is not valid. CHOOSE FROM ["syn", "lsac", "cardio", "bank", "meps16", "credit", "ACSE", "ACSP", "ACSH", "ACSM", "ACSI"].')
 
     if args.set_n is not None:
         if type(args.set_n) == str:

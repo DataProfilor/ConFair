@@ -16,11 +16,38 @@ pip install -e DataInsights
 ```
 
 ## Run the tool
-Then download the code repository and cd to your downloaded local directory. Run one single execution of the experiments using the below command.
+Then download the code repository and cd to your downloaded local directory "ConFair". Run one single execution of the experiments using the below command.
+
+### Execute below script to run the experiments for ConFair and DifFair in their performance over real-world data
 
 ```bash
-./ exec.zsh
+./ exec_confair.zsh
 ```
+
+### Execute below script to run the experiments for ConFair and DifFair in their performance over synthetic data
+
+```bash
+./ exec_diffair.zsh
+```
+
+### Execute below script to run the experiments in comparing ConFair to OMN in their performance under model-aware weights
+
+```bash
+./ exec_aware.zsh
+```
+
+### Execute below script to run the experiments in comparing ConFair and DifFair in their performance without the optimization of CCs over real data
+
+```bash
+./ exec_opt_cc.zsh
+```
+
+### Execute below script to run the experiments in comparing ConFair to OMN in their relationship between inpute degree and fairness improvement
+
+```bash
+./ exec_degree.zsh
+```
+
 
 
 Note that for MEPS16 dataset, you need to extract the raw data using the R scrip. See details at https://github.com/Trusted-AI/AIF360/blob/master/aif360/data/raw/meps/README.md.

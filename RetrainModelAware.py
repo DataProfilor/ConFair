@@ -21,10 +21,6 @@ def get_sp(settings, inter_degree, reverse_flag=False, y_col = 'Y'):
 
     model = learner.fit(train_data, Y_train, features, seed, weights)
 
-    if ('bank' in cur_path or 'cardio' in cur_path) and model_name == 'tr':  # for a more finite search space
-        n_thres = 1000
-    else:
-        n_thres = 100
 
     if model is not None:
         val_data = validate_df[features]
@@ -32,7 +28,7 @@ def get_sp(settings, inter_degree, reverse_flag=False, y_col = 'Y'):
         if sum(val_predict) == 0:
             print('==> model predict only one label for val data ', data_name, model_name, seed, reweigh_method, weight_base)
         validate_df['Y_pred_scores'] = val_predict
-        opt_thres = find_optimal_thres(validate_df, opt_obj='BalAcc', num_thresh=n_thres)
+        opt_thres = find_optimal_thres(validate_df, opt_obj='BalAcc', num_thresh=100)
         cur_thresh = opt_thres['thres']
 
         validate_df['Y_pred'] = validate_df['Y_pred_scores'].apply(lambda x: int(x > cur_thresh))
@@ -54,18 +50,13 @@ def retrain_model_with_weights_once(settings, input_degree, use_weight=True, y_c
     else:
         best_model = learner.fit(train_data, Y_train, features, seed)
 
-    if ('bank' in cur_path or 'cardio' in cur_path):  # for a more finite search space
-        n_thres = 1000
-    else:
-        n_thres = 100
-
     if best_model is not None:
         val_data = validate_df[features]
         val_predict = generate_model_predictions(best_model, val_data)
         if sum(val_predict) == 0:
             print('==> model predict only one label for val data ', data_name, model_name, seed, reweigh_method, weight_base)
         validate_df['Y_pred_scores'] = val_predict
-        opt_thres = find_optimal_thres(validate_df, opt_obj='BalAcc', num_thresh=n_thres)
+        opt_thres = find_optimal_thres(validate_df, opt_obj='BalAcc', num_thresh=100)
         best_threshold = opt_thres['thres']
 
         validate_df['Y_pred'] = validate_df['Y_pred_scores'].apply(lambda x: int(x > best_threshold))
@@ -150,7 +141,6 @@ def retrain_ML_with_weights_aware(data_name, seed, model_name, reweigh_method, w
 
     if res is not None:
         best_model, best_threshold, best_degree, best_sp, best_acc = res
-        # print('++++ Best val', model_name, best_degree, best_acc, best_sp, '++++')
 
         res_dict = {'time': time, 'BalAcc': best_acc, 'thres': best_threshold, 'degree': best_degree, 'SPDiff': best_sp}
         save_json(res_dict, '{}par-{}-{}-{}-{}-aware.json'.format(cur_dir, model_name, seed, reweigh_method, weight_base))
@@ -160,9 +150,6 @@ def retrain_ML_with_weights_aware(data_name, seed, model_name, reweigh_method, w
         if sum(test_predict) == 0:
             print('==> model predict only one label for test data ', data_name, model_name, seed, reweigh_method, weight_base)
         test_df['Y_pred'] = test_predict
-        # best_sp_test = eval_sp(test_df, 'Y_pred')
-        # eval_res = eval_settings(test_df, sensi_col, 'Y_pred')['all']
-        # print('++++ Best over test', model_name, best_degree, best_sp_test, eval_res['DI'], eval_res['BalAcc'],'++++')
         dump(best_model, '{}{}-{}-{}-{}-aware.joblib'.format(cur_dir, model_name, seed, reweigh_method, weight_base))
 
         test_df[[sensi_col, 'Y', 'Y_pred']].to_csv('{}pred-{}-{}-{}-{}-aware.csv'.format(cur_dir, model_name, seed, reweigh_method, weight_base), index=False)
@@ -170,7 +157,7 @@ def retrain_ML_with_weights_aware(data_name, seed, model_name, reweigh_method, w
         print('--- No model is found', data_name, seed, model_name, reweigh_method, weight_base)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train weighted ML models with weights from another model")
+    parser = argparse.ArgumentParser(description="Train weighted ML models with weights for another model")
     parser.add_argument("--run", type=str, default='parallel',
                         help="setting of 'parallel' for system evaluation or 'serial' execution for unit test.")
     parser.add_argument("--data", type=str, default='all',
